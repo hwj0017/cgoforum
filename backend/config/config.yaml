@@ -1,0 +1,38 @@
+server:
+  addr: ":8080"
+  mode: "debug" # debug, release, test
+
+log:
+  level: "debug" # debug, info, warn, error
+  dir: "logs"
+
+database:
+  dsn: "host=localhost port=5432 user=cgoforum password=cgoforum123 dbname=cgoforum sslmode=disable TimeZone=Asia/Shanghai"
+  max_idle: 10
+  max_open: 100
+  conn_max_lifetime: 3600 # seconds
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+rabbitmq:
+  url: "amqp://cgoforum:cgoforum123@localhost:5672/"
+
+meilisearch:
+  addr: "http://localhost:7700"
+  api_key: "cgoforum_master_key"
+  index: "articles"
+
+vectorizer:
+  endpoint: "http://localhost:8001"
+  model: "moka-ai/m3e-base"
+  timeout_ms: 8000
+
+jwt:
+  private_key_path: "config/keys/private.pem"
+  public_key_path: "config/keys/public.pem"
+  access_expire: 1800     # 30 minutes
+  refresh_expire: 604800  # 7 days
+  issuer: "cgoforum"
