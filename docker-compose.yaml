@@ -1,0 +1,151 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: cgoforum_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: cgoforum
+      POSTGRES_PASSWORD: cgoforum123
+      POSTGRES_DB: cgoforum
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+    command: ["postgres", "-c", "timezone=Asia/Shanghai"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cgoforum"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cgoforum_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: cgoforum_redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cgoforum_net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: cgoforum_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: cgoforum
+      RABBITMQ_DEFAULT_PASS: cgoforum123
+    volumes:
+      - mqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    networks:
+      - cgoforum_net
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.7
+    container_name: cgoforum_meilisearch
+    ports:
+      - "7700:7700"
+    environment:
+      MEILI_MASTER_KEY: cgoforum_master_key
+      MEILI_ENV: development
+    volumes:
+      - msdata:/meili_data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:7700/health | grep available"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cgoforum_net
+
+  vectorizer:
+    build:
+      context: ./backend/vectorizer-service
+      dockerfile: Dockerfile
+    container_name: cgoforum_vectorizer
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8001/health | grep ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    profiles:
+      - app
+    networks:
+      - cgoforum_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cgoforum_backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      vectorizer:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend/config/config.docker.yaml:/app/config/config.yaml:ro
+      - ./backend/config/keys:/app/config/keys:ro
+    profiles:
+      - app
+    networks:
+      - cgoforum_net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+      args:
+        VITE_API_BASE: http://127.0.0.1:8080
+    container_name: cgoforum_frontend
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE: http://127.0.0.1:8080
+    profiles:
+      - app
+    networks:
+      - cgoforum_net
+
+volumes:
+  pgdata:
+  redisdata:
+  mqdata:
+  msdata:
+
+networks:
+  cgoforum_net:
+    driver: bridge
